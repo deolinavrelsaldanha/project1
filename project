@@ -1,0 +1,127 @@
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+
+DATABASE_URL = "postgresql://username:password@localhost:5432/mydb"
+
+engine = create_engine(DATABASE_URL)
+SessionLocal =sessionmaker(autocommit=False, autoflush=False, bind =engine)
+
+Base = declarative_base()
+
+from sqlalchemy import column, Integer ,String ,ForeignKey ,Text ,Datetime,func
+from sqlalchemy.orm import relationship
+from database import Base
+
+class User(Base)
+    __tablename__ ="users"
+
+    id =colun(Integer,primary_key =True, index=True)
+    username =Column(String, unique=True, index=True)
+
+    sessions =relationship("ConversationSession", back_population ="user")
+
+class ConversationSession(Base):
+    __tablename__ ="Sessions"
+
+    id =Column(Interger ,ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True),server_default=func.now())
+
+    user =relationship("Message", back_populates = "session")
+
+class Messsage(Base):
+    __tablename__ ="messages"
+
+    id =Column(Integer, primary_key =True, index =True)
+    session_id =Cloumn(String)
+    content =Column(Text)
+    created_at =Column(DateTime(Timezone =True),server_default=func.now())
+
+    session =relationship("ConversationSession", back_populates= "messages")
+
+    from pydantic import BaseModel
+    from typing import List,Optional
+
+    class MessageCreate(BaseModel):
+        user_id:int
+        session_id : Optional[int]=None
+        content :str
+
+    class MessageResponse(BaseModel):
+        sender:str 
+        content:str
+        created_at:str
+
+        class Config:
+            orm_mode =True
+
+    #main.py
+
+    from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy.orm import Session
+from database import SessionLocal, engine
+import models, schemas
+import openai  # Or use requests for Groq API
+
+models.Base.metadata.create_all(bind=engine)
+
+app = FastAPI()
+
+# Dependency
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@app.post("/api/chat")
+def chat(msg: schemas.MessageCreate, db: Session = Depends(get_db)):
+    
+    if msg.session_id:
+        session = db.query(models.ConversationSession).filter_by(id=msg.session_id).first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+    else:
+        session = models.ConversationSession(user_id=msg.user_id)
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+
+    # Store user message
+    user_msg = models.Message(session_id=session.id, sender="user", content=msg.content)
+    db.add(user_msg)
+    db.commit()
+
+    
+    ai_response = fake_llm_response(msg.content)  # Replace with Groq/OpenAI call
+
+    # Store AI response
+    ai_msg = models.Message(session_id=session.id, sender="ai", content=ai_response)
+    db.add(ai_msg)
+    db.commit()
+
+    return {"session_id": session.id, "response": ai_response}
+
+def fake_llm_response(prompt: str) -> str:
+    return f"Echo: {prompt}"  
+
+    #load_data.py
+
+    import ConversationSessionfrom database import SessionLocal, engine
+    import models
+
+    models.Base.metadata.create_all(bind=engine)
+
+    db =SessionLocal()
+
+    with open("data.csv,newline="")as  csvfile :
+        reader = csv.DictReader(csvfile)
+    for row in reader:
+        # Example: store product data if you have products table
+        print(row)
+        # Add your logic here
+
+db.commit()
+db.close()
+
